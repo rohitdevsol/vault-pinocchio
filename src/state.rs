@@ -1,7 +1,5 @@
-pub struct VaultState {
-    pub bump: u8,
-}
+pub struct VaultState;
 
 impl VaultState {
-    pub const LEN: usize = core::mem::size_of::<VaultState>();
+    pub const LEN: usize = 0;
 }

@@ -5,6 +5,7 @@ use pinocchio_system::instructions::Transfer;
 pub struct Withdraw<'a> {
     pub owner: &'a AccountView,
     pub vault: &'a AccountView,
+    pub bump: u8,
 }
 
 impl<'a> Withdraw<'a> {
@@ -12,12 +13,11 @@ impl<'a> Withdraw<'a> {
 
     pub fn process(&self) -> ProgramResult {
         // read bump from vault
-        let bump = unsafe { self.vault.borrow_unchecked()[0] };
-        let bump_binding = [bump];
+        let bump_binding = [self.bump];
 
         let expected_vault = derive_address(
             &[b"vault", self.owner.address().as_ref()],
-            Some(bump),
+            Some(self.bump),
             &crate::ID
         );
 
@@ -32,10 +32,10 @@ impl<'a> Withdraw<'a> {
         let signer_seeds = [
             Seed::from(b"vault"),
             Seed::from(self.owner.address().as_ref()),
-            Seed::from(&bump_binding[..]),
+            Seed::from(&bump_binding),
         ];
 
-        let signers = [Signer::from(&signer_seeds[..])];
+        let signers = [Signer::from(&signer_seeds)];
 
         (Transfer {
             from: self.vault,
@@ -47,9 +47,10 @@ impl<'a> Withdraw<'a> {
     }
 }
 
-impl<'a> TryFrom<&'a [AccountView]> for Withdraw<'a> {
+impl<'a> TryFrom<(&'a [u8], &'a [AccountView])> for Withdraw<'a> {
     type Error = ProgramError;
-    fn try_from(accounts: &'a [AccountView]) -> Result<Self, Self::Error> {
+    fn try_from((data, accounts): (&'a [u8], &'a [AccountView])) -> Result<Self, Self::Error> {
+        let bump = *data.first().ok_or(ProgramError::InvalidInstructionData)?;
         let [owner, vault, _system_program] = accounts else {
             return Err(ProgramError::NotEnoughAccountKeys);
         };
@@ -58,7 +59,7 @@ impl<'a> TryFrom<&'a [AccountView]> for Withdraw<'a> {
             return Err(ProgramError::MissingRequiredSignature);
         }
 
-        if !vault.owned_by(&crate::ID.into()) {
+        if !vault.owned_by(&pinocchio_system::ID) {
             return Err(ProgramError::InvalidAccountOwner);
         }
 
@@ -66,6 +67,6 @@ impl<'a> TryFrom<&'a [AccountView]> for Withdraw<'a> {
             return Err(ProgramError::InvalidAccountData);
         }
 
-        Ok(Self { owner, vault })
+        Ok(Self { owner, vault, bump })
     }
 }
